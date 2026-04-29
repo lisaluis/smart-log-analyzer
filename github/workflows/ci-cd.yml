@@ -1,0 +1,89 @@
+name: Smart Log Analyzer CI/CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test-and-train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download dataset
+        run: |
+          mkdir -p data
+          # If using kaggle API:
+          # pip install kaggle
+          # kaggle datasets download -d stephanmatzka/predictive-maintenance-dataset-ai4i-2020
+          # unzip *.zip -d data/
+
+      - name: Preprocess data
+        run: python src/preprocess.py
+
+      - name: Train model
+        run: python src/train.py
+
+  build-and-push:
+    needs: test-and-train
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push Docker image to ECR
+        env:
+          ECR_REGISTRY:   ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: smart-log-analyzer
+          IMAGE_TAG:      ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push    $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag     $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                         $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push    $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to ECR from EC2
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS \
+              --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+            # Pull latest image
+            docker pull ${{ secrets.ECR_REGISTRY }}/smart-log-analyzer:latest
+
+            # Stop old containers and restart
+            cd ~/smart-log-analyzer
+            docker-compose down
+            docker-compose up -d
+            echo "Deployment complete!"

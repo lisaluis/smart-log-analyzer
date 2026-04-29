@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: smart-log-analyzer
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 5000
+
+  - type: web
+    name: mlflow-server
+    env: docker
+    plan: free
+    dockerCommand: >
+      pip install mlflow &&
+      mlflow server --host 0.0.0.0 --port 5001
+    envVars:
+      - key: PORT
+        value: 5001
