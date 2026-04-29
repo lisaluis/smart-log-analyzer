@@ -1,4 +1,4 @@
-name: Smart Log Analyzer CI/CD Pipeline
+﻿name: Smart Log Analyzer CI/CD Pipeline
 
 on:
   push:
