@@ -4,6 +4,8 @@ import pickle
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
+import sys
+sys.path.append('src')
 from preprocess import preprocess
 
 # ── Point MLflow to your tracking server ──────────
