@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
 
@@ -6,9 +6,6 @@ services:
     build: .
     ports:
       - "5000:5000"
-    volumes:
-      - ./models:/app/models
-      - ./data:/app/data
     depends_on:
       - mlflow
     networks:
@@ -16,17 +13,11 @@ services:
 
   mlflow:
     image: python:3.10-slim
-    command: >
-      bash -c "pip install mlflow boto3 -q &&
-               mlflow server
-               --host 0.0.0.0
-               --port 5001
-               --default-artifact-root /mlflow/artifacts
-               --backend-store-uri sqlite:///mlflow/mlflow.db"
+    command: bash -c "pip install mlflow -q && mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:////mlflow_data/mlflow.db --allowed-hosts '*'"
     ports:
       - "5001:5001"
     volumes:
-      - mlflow_data:/mlflow
+      - mlflow_data:/mlflow_data
     networks:
       - monitoring
 

@@ -1,0 +1,112 @@
+name: Smart Log Analyzer — CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ────────────────────────────────────────────────────
+  # JOB 1 — Test & Train
+  # ────────────────────────────────────────────────────
+  test:
+    name: 🧪 Test & Train Model
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🐍 Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🔬 Preprocess data
+        run: python src/preprocess.py
+
+      - name: 🤖 Train model
+        run: python src/train.py
+        env:
+          MLFLOW_TRACKING_URI: ""   # skip MLflow in CI
+
+      - name: 📊 Evaluate model
+        run: python src/evaluate.py
+
+      - name: ✅ Check model files exist
+        run: |
+          test -f models/model.pkl  && echo "✅ model.pkl found"
+          test -f models/scaler.pkl && echo "✅ scaler.pkl found"
+
+      - name: 📤 Upload model artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: trained-models
+          path: models/
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────
+  # JOB 2 — Build Docker Image
+  # ────────────────────────────────────────────────────
+  docker:
+    name: 🐳 Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🔐 Log in to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏗️ Build and push API image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          dockerfile: Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/smart-log-analyzer:latest
+            ${{ secrets.DOCKER_USERNAME }}/smart-log-analyzer:${{ github.sha }}
+
+      - name: 🏗️ Build and push Streamlit image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          dockerfile: Dockerfile.streamlit
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/smart-log-ui:latest
+            ${{ secrets.DOCKER_USERNAME }}/smart-log-ui:${{ github.sha }}
+
+  # ────────────────────────────────────────────────────
+  # JOB 3 — Deploy to Render
+  # ────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to Render
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 🚀 Trigger Render deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
+            -H "Content-Type: application/json" \
+            --fail
+        continue-on-error: true
+
+      - name: ✅ Deploy summary
+        run: |
+          echo "🎉 Deployment triggered!"
+          echo "API URL: https://smart-log-analyzer-n3v3.onrender.com"

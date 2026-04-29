@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+*.egg-info/
+
+# Models (generated at build time)
+models/*.pkl
+models/*.png
+
+# Data (large files)
+data/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+.docker/
+
+# MLflow
+mlruns/
+mlflow.db
